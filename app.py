@@ -1,17 +1,17 @@
 import streamlit as st
 import sqlite3
 import pandas as pd
+import json
 
 # Función para obtener conexión a la base de datos
 def get_db_connection():
-    # Se crea o abre la base de datos "libredelivery_admin.db"
     conn = sqlite3.connect('libredelivery_admin.db', check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
 
 conn = get_db_connection()
 
-# Función para crear las tablas necesarias si no existen
+# Crear las tablas si no existen
 def create_tables():
     with conn:
         conn.execute('''
@@ -37,17 +37,24 @@ def create_tables():
 
 create_tables()
 
-# Sidebar para la navegación
+# Si se añade ?format=json a la URL, se retorna el JSON de los mercados
+query_params = st.experimental_get_query_params()
+if query_params.get("format") == ["json"]:
+    df = pd.read_sql_query("SELECT * FROM mercados", conn)
+    # Convertir el dataframe a lista de diccionarios
+    mercados = df.to_dict(orient="records")
+    st.json(mercados)
+    st.stop()
+
+# Si no se solicita JSON, se muestra la interfaz de administración
 st.sidebar.title("Panel Administrativo")
 page = st.sidebar.radio("Navegar", ["Mercados", "Productos"])
 
 if page == "Mercados":
     st.title("Gestión de Mercados")
     st.header("Ver Mercados")
-    # Consulta para mostrar los mercados existentes
-    mercados = pd.read_sql_query("SELECT * FROM mercados", conn)
-    st.dataframe(mercados)
-
+    mercados_df = pd.read_sql_query("SELECT * FROM mercados", conn)
+    st.dataframe(mercados_df)
     st.header("Agregar Nuevo Mercado")
     with st.form("Agregar Mercado", clear_on_submit=True):
         nombre = st.text_input("Nombre del Mercado")
@@ -65,12 +72,9 @@ if page == "Mercados":
                 st.success("Mercado agregado correctamente.")
             else:
                 st.error("Por favor, ingresa al menos el nombre y la ciudad del mercado.")
-
 elif page == "Productos":
     st.title("Gestión de Productos")
     st.header("Agregar Producto")
-    
-    # Obtener lista de mercados para seleccionar uno
     mercados_df = pd.read_sql_query("SELECT * FROM mercados", conn)
     if not mercados_df.empty:
         mercado_options = mercados_df[['id', 'nombre']].to_dict('records')
@@ -101,7 +105,6 @@ elif page == "Productos":
                     st.success("Producto agregado correctamente.")
                 else:
                     st.error("El nombre del producto es obligatorio.")
-
         st.header("Ver Productos del Mercado")
         query = "SELECT * FROM productos WHERE idTienda = ?"
         productos_df = pd.read_sql_query(query, conn, params=(selected_market,))
